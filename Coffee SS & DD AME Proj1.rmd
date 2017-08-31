@@ -1,0 +1,213 @@
+# Analytics of Managerial Economics Project 1 
+Tan Tian Tze A0161067J
+
+Executive summary (not more than half a page)
+The aim of this study is to gain a better understanding of roasted coffee market in
+Netherlands to increase the market share and profit of the ABC Coffee Roasters.
+We analysed the coffee consumption data between 1990 to 1996 from the Dutch
+Market to estimate the demand and supply functions. We estimated the elasticity
+of demand to be -0.28661 which yields a monopolistic price of 4.48 times
+Marginal cost. However, the market clearing price is between Marginal Cost and
+Monopolistic price which indicates an oligopolistic Market. In addition, we see an
+evidence of interdependent behaviour in the seasonal fluctuation in the supply.
+Based on this analysis we believe a strategy based on selling differentiated
+products and building brand loyalty would work best in this market.
+Abstract
+Quick highlights - 
+Demand
+demand side is fine. Just need to talk about tprice and income
+Supply
+supply side is failing, wprice is wierdly related to cprice (can be due to policy for wages), basic model assumptions might be wrong
+
+
+Assumptions
+Assumption of the demand function - tends to perfect competition, simple constant elasticity model, enough time for supplier and demand to react to price (level of data)
+
+Demand function (not more than 1.5 pages)
+Model comparison
+Simple OLS vs TSLS
+Defend choice of control variables and IV's
+2 assumptions checks
+Income vs Tprice
+Why ignore oprice?
+Why not use both tprice and income?
+Hausman test for instruments
+
+Supply function ( ideally 2 pages)
+Model comparison
+Defend choice of control variables and IV's
+Problem about controls - Cprice not being significant in some cases, and -ve sign in other cases
+Why wprice and bprice not working together? - try wprice, try bprice, try both
+This could be because our original assumption about constant supply elasticity unsuitable
+Another reason why not working could be because of oligopolistic coffee market in Netherlands, so supply doenst depend on price
+Hausman proves choice of instruments to be fine - tried income, quarter(not significant) and tprice
+
+Appendix
+
+Log
+
+
+## Estimating Coffee Demand and Supply Functions
+maand - year and month of observation
+year - year of observation
+month - month of observation
+qu - per capita consumption of roasted coffee in kg
+cprice -  price of roasted coffee per kg in current guilders
+tprice - price of per kg tea in current guilders
+oprice - price index for other goods
+income - income per capita in current guilders
+q1 - season dummy 1
+q2 - season dummy 2
+q3 - season dummy 3
+q4 - season dummy 4
+bprice - price of coffee beans per kg in current guilders
+wprice - price of labor per man hours (work 160 hours per month)
+
+The price elasticity of demand and price elasticity of supply for roasted coffee.  Findings will contribute to firms’ understanding of how revenue would change due to price changes (i.e. price elasticity of demand), and how quickly and effectively firms could respond to market conditions, especially changes in price (i.e. price elasticity of supply) (Agarwal, 2016).
+
+Agarwal, P. (2016). Price elasticity of demand. Intelligent Economist. Retrieved from: https://www.intelligenteconomist.com/price-elasticity-of-demand/
+
+```{r}
+rawdata <- read.csv("Project1Data.csv")
+```
+## Factors of production 
+Calculating Input_price (factors of production) and % of labour and bean price of Input_price
+
+```{r}
+rawdata$input_price <- rawdata$wprice + rawdata$bprice 
+rawdata$wprice_percent <- rawdata$wprice / rawdata$input_price
+rawdata$bprice_percent <- rawdata$bprice / rawdata$input_price
+```
+## Adjustment for Inflation 
+Controlling for inflation by dividing the price variable by oprice
+cprice -  price of roasted coffee per kg in current guilders
+tprice - price of per kg tea in current guilders
+oprice - price index for other goods
+income - income per capita in current guilders
+bprice - price of coffee beans per kg in current guilders
+wprice - price of labor per man hours (work 160 hours per month)
+```{r}
+#matrix of factors adjusted by inflation 
+adj.data <- rawdata[ ,c(5,6,8,13,14)] / rawdata$oprice
+# changing col names 
+colnames(adj.data) <- paste(colnames(adj.data),"adj", sep = "_")
+
+combine.adj <- cbind(rawdata, adj.data)
+```
+## Log transform variables
+Since we are assuming an exponential demand function with constant elasticity, we need to log transform all the necessary variables
+
+```{r}
+log.transform <- log((combine.adj[,-c(1:3, 9:12)]))
+colnames(log.transform) <- paste("ln", colnames(log.transform), sep = "_")
+combine.adj.ln <- cbind(combine.adj, log.transform)
+```
+ 
+## Demand function estimation
+Now running a *simple OLS* between cprice and qu, to get the control variables 
+```{r}
+lm1.dd <- lm(ln_qu ~ ln_cprice + ln_tprice + ln_incom, data = combine.adj.ln)
+summary(lm1.dd)
+```
+Estimate Std. Error t value Pr(>|t|)   
+(Intercept)  -4.6814     2.1808  -2.147   0.0348 * 
+ln_cprice    -0.3581     0.1321  -2.711   0.0082 **
+Multiple R-squared:  0.1162,	Adjusted R-squared:  0.08304 
+
+price is an endogenous variable, and not exogenous, we need to run a TSLS, to get the accurate prediction of demand elasticity
+  
+## Demand Two stage Least Square        
+The first step is finding an estimate of Cprice using intrument variables and controlling for demand using control variables
+
+```{r}
+lm2.dd <- lm(ln_cprice_adj ~ ln_bprice_adj + ln_incom_adj + ln_tprice_adj, data = combine.adj.ln)
+summary(lm2.dd)
+# ln_bprice_adj  0.48654    0.01786  27.243   <2e-16 ***
+# Multiple R-squared:  0.9197,	Adjusted R-squared:  0.9167          
+
+# Use fitted values of price from lm2.dd and save in a column, run a 2nd step of regression, to correctly get estimate
+combine.adj.ln$cprice_pred2_dd <- lm2.dd$fitted.values
+
+# Run the 2nd stage OLS with the predicted values of coffee 
+lm2.dd.pred <- lm(ln_qu ~ cprice_pred2_dd + ln_incom_adj + ln_tprice_adj, data = combine.adj.ln)
+summary(lm2.dd.pred)
+```
+(Intercept)     -8.85374    3.71823  -2.381  0.01963 * 
+cprice_pred2_dd -0.29798    0.09884  -3.015  0.00345 **
+ln_incom_adj     1.01246    0.34886   2.902  0.00479 **
+
+Multiple R-squared:  0.1451,	Adjusted R-squared:  0.1131 
+
+## Check correlation between Instrument variables with residuals in model lm2.dd.pred
+
+```{r}
+hausman.test.dd <- cbind(as.data.frame(combine.adj.ln$ln_bprice_adj), as.data.frame(lm2.dd.pred$residuals))
+
+colnames(hausman.test.dd) <- c("ln_bprice","residuals")
+
+hausman_test <- lm(residuals ~ ln_bprice, data = hausman.test.dd)
+summary(hausman_test)
+```
+No correlation seen. Independence can be assumed.
+Multiple R-squared:  2.312e-29,	Adjusted R-squared:  -0.0122 
+
+## Supply function estimation
+*Simple OLS of Supply* between cprice and qu, to get the control variables
+qu - per capita consumption of roasted coffee in kg
+cprice -  price of roasted coffee per kg in current guilders
+bprice - price of coffee beans per kg in current guilders
+wprice - price of labor per man hours (work 160 hours per month)
+```{r}
+lm1.ss <- lm(ln_qu ~ ln_cprice + ln_bprice + ln_wprice + q1 + q2 + q3, data = combine.adj.ln)
+summary(lm1.ss)
+```
+Multiple R-squared:  0.2736,	Adjusted R-squared:  0.217 
+Not great, seemingly no relationship. 
+
+## TSLS on Supply function for Coffee
+Firstly, predict (fitted values) Cprice using instrument variables and controlling for demand using control variables
+```{r}
+lm2.ss <- lm(ln_cprice_adj ~ ln_incom_adj + ln_bprice_adj, data = combine.adj.ln)
+summary(lm2.ss)
+```
+
+### Predicted cprice using lm2.ss model
+
+```{r}
+combine.adj.ln$cprice_pred_ss <- lm2.ss$fitted.values
+```
+
+## 2nd Stage OLS on Supply using cprice_pred_ss
+
+```{r}
+lm2.ss.pred <- lm(ln_qu ~ cprice_pred_ss + ln_bprice_adj + q1 + q2 + q3, data = combine.adj.ln)
+summary(lm2.ss.pred)
+```
+ln_bprice_adj  -0.69149    0.37837  -1.828 0.071442 .  
+q1             -0.11158    0.03179  -3.510 0.000747 ***
+q2             -0.08833    0.03017  -2.928 0.004468 ** 
+q3             -0.10846    0.03073  -3.529 0.000702 ***
+Multiple R-squared:  0.2827,	Adjusted R-squared:  0.2367 
+
+### Correlation of Instrument variables chosen with residuals
+
+```{r}
+hausman.test.ss <- cbind(as.data.frame(combine.adj.ln$ln_cprice_adj), as.data.frame(lm2.ss.pred$residuals))
+
+colnames(hausman.test.ss) <- c("ln_cprice","residuals")
+
+hausman_test_supply <- lm(residuals ~ ln_cprice, data = hausman.test.ss)
+summary(hausman_test_supply)
+```
+No correlation seen. Independence can be assumed.
+Multiple R-squared:  3.881e-05,	Adjusted R-squared:  -0.01216 
+
+```{r}
+
+```
+
+
+```{r}
+sessionInfo()
+```
+
